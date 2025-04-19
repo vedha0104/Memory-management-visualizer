@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Memory Allocation Visualizer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .memory-block {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+            border: 1px solid #333;
+            transition: all 0.3s;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .block-info {
+            padding: 10px;
+            width: 200px;
+            background: #e0e0e0;
+            border-right: 1px solid #ddd;
+        }
+        .block-visual {
+            flex-grow: 1;
+            padding: 10px;
+            text-align: center;
+            color: white;
+            border-radius: 0 5px 5px 0;
+        }
+        .free {
+            background-color: #4CAF50;
+        }
+        .used {
+            background-color: #f44336;
+        }
+        .controls {
+            margin: 20px 0;
+            padding: 15px;
+            background: #eee;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        input, button {
+            margin: 5px;
+            padding: 5px;
+            border-radius: 5px;
+            border: none;
+            background-color: #ddd;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .algorithm-selector {
+            margin: 10px 0;
+            padding: 5px;
+            border-radius: 5px;
+            border: none;
+            background-color: #ddd;
+        }
+    </style>
+</head>
+<body>
+    <h2 style="color: #007bff;">Memory Allocation Visualization</h2>
+    
+    <div class="controls">
+        <select id="algorithm" class="algorithm-selector" onchange="updateAlgorithm()">
+            <option value="first">First Fit</option>
+            <option value="best">Best Fit</option>
+            <option value="worst">Worst Fit</option>
+        </select>
+        <input type="text" id="processName" placeholder="Process name">
+        <input type="number" id="processSize" placeholder="Size">
+        <button onclick="allocateMemory()">Allocate</button>
+        <button onclick="deallocateMemory()">Deallocate</button>
+    </div>
+
+    <div id="memory-container"></div>
+    <div id="status"></div>
+
+    <script>
+        const MEMORY_SIZE = 1000;
+        let memory = null;
+        let currentAlgorithm = 'first';
+
+        class Block {
+            constructor(start, size, isFree = true, name = "Free") {
+                this.start = start;
+                this.size = size;
+                this.isFree = isFree;
+                this.name = name;
+                this.next = null;
+            }
+        }
+
+        function updateAlgorithm() {
+            currentAlgorithm = document.getElementById('algorithm').value;
+            showStatus(`Algorithm changed to ${document.getElementById('algorithm').options[document.getElementById('algorithm').selectedIndex].text}`);
+        }
+
+        function initializeMemory() {
+            memory = new Block(0, MEMORY_SIZE);
+            updateDisplay();
+        }
+
+        function findFirstFit(size) {
+            let current = memory;
+            while (current) {
+                if (current.isFree && current.size >= size) return current;
+                current = current.next;
+            }
+            return null;
+        }
+
+        function findBestFit(size) {
+            let current = memory;
+            let bestBlock = null;
+            let minSize = Infinity;
+            
+            while (current) {
+                if (current.isFree && current.size >= size && current.size < minSize) {
+                    bestBlock = current;
+                    minSize = current.size;
+                }
+                current = current.next;
+            }
+            return bestBlock;
+        }
+
+        function findWorstFit(size) {
+            let current = memory;
+            let worstBlock = null;
+            let maxSize = -Infinity;
+            
+            while (current) {
+                if (current.isFree && current.size >= size && current.size > maxSize) {
+                    worstBlock = current;
+                    maxSize = current.size;
+                }
+                current = current.next;
+            }
+            return worstBlock;
+        }
+
+        function allocateMemory() {
+            const name = document.getElementById('processName').value;
+            const size = parseInt(document.getElementById('processSize').value);
+            
+            let candidate = null;
+            switch(currentAlgorithm) {
+                case 'first':
+                    candidate = findFirstFit(size);
+                    break;
+                case 'best':
+                    candidate = findBestFit(size);
+                    break;
+                case 'worst':
+                    candidate = findWorstFit(size);
+                    break;
+            }
+
+            if (candidate) {
+                if (candidate.size > size) {
+                    const newBlock = new Block(
+                        candidate.start + size,
+                        candidate.size - size,
+                        true
+                    );
+                    newBlock.next = candidate.next;
+                    candidate.next = newBlock;
+                }
+                candidate.size = size;
+                candidate.isFree = false;
+                candidate.name = name;
+                updateDisplay();
+                showStatus(`Memory allocated to ${name} using ${document.getElementById('algorithm').options[document.getElementById('algorithm').selectedIndex].text}`);
+                return;
+            }
+            showStatus(`Insufficient memory for ${name}`, true);
+        }
+
+        function deallocateMemory() {
+            const name = document.getElementById('processName').value;
+            let current = memory;
+            let prev = null;
+
+            while (current) {
+                if (!current.isFree && current.name === name) {
+                    current.isFree = true;
+                    current.name = "Free";
+                    
+                    
+                    if (current.next && current.next.isFree) {
+                        current.size += current.next.size;
+                        current.next = current.next.next;
+                    }
+                    
+                    
+                    if (prev && prev.isFree) {
+                        prev.size += current.size;
+                        prev.next = current.next;
+                        freeMemoryBlock(current); 
+                    } else {
+                        updateDisplay();
+                    }
+                    
+                    showStatus(`Memory deallocated from ${name}`);
+                    return;
+                }
+                prev = current;
+                current = current.next;
+            }
+            showStatus(`Process ${name} not found`, true);
+        }
+
+        function freeMemoryBlock(block) {
+           
+            updateDisplay();
+        }
+
+        function updateDisplay() {
+            const container = document.getElementById('memory-container');
+            container.innerHTML = '';
+            
+            let current = memory;
+            while (current) {
+                const block = document.createElement('div');
+                block.className = 'memory-block';
+                
+                block.innerHTML = `
+                    <div class="block-info">
+                        Start: ${current.start}<br>
+                        Size: ${current.size}<br>
+                        ${current.isFree ? 'Free' : 'Used'}
+                    </div>
+                    <div class="block-visual ${current.isFree ? 'free' : 'used'}" 
+                         style="width: ${(current.size / MEMORY_SIZE) * 100}%">
+                        ${current.name}
+                    </div>
+                `;
+                
+                container.appendChild(block);
+                current = current.next;
+            }
+        }
+
+        function showStatus(message, isError = false) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.style.color = isError ? 'red' : 'green';
+        }
+
+        
+        initializeMemory();
+    </script>
+</body>
+</html>
